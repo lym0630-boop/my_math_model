@@ -5,6 +5,12 @@
 > **注意**：本仓库仅包含代码，不含模型权重、数据集、Checkpoint 及训练日志。克隆后需根据自身环境修改脚本中的绝对路径。
 
 ---
+**评测结果**
+| Model      | Math Eval     |
+|------------|---------------|
+| Base Model | 83.0%         |
+| LPPO v2    | 84.8% (+1.8%) |
+
 
 ## 项目结构
 
@@ -69,101 +75,10 @@ OpenWebMath-4plus 原始网页数学语料
      │  evaluation/eval_math.py
 ```
 
----
-
-## 核心模块说明
-
-### 1. CPT 数据清洗（`modules/data_cleaner/`）
-
-基于 **"规则粗切 + 大模型筛选补充"** 原则设计的数学语料清洗 pipeline：
-
-```
-输入 JSONL (id + text)
-    │
-    ▼
- segmenter       规则粗切（空行切分 → 标题拆分 → 合并短块 → 拆分长块 → 公式保护）
-    │
-    ▼
- light_rules     轻规则清洗 + 特征提取
-    │
-    ▼
- scorer(初筛)    openwebmath-classifier 评分 → 路由
-    │
-    ├── 高分 → 直接保留
-    ├── 低分 → 直接丢弃
-    └── 灰区 → LLM 筛选补充 → 数学感知校验 → 保留/回退/丢弃
-```
-
-**LLM 处理灰区文本的三个操作**：
-1. **去噪**：删除残余网页噪声、无关引导语
-2. **可恢复补全**：补充被截断的题设、上下文明确但缺失的符号说明
-3. **分步重写**：把零散跳跃的解答整理成逻辑连贯的形式
-
-**安全保障**（`validator.py` 数学感知校验）：
-- LLM 处理后由 Classifier 复评分，分数不能下降
-- 数字/变量/符号的 recall 检查，防止 LLM 篡改公式
-- 校验失败 → 回退到轻清洗版本（宁可保守，不把数学内容洗坏）
-
-```bash
-# 使用 openwebmath-classifier + regex 处理器（无需 GPU）
-python -m openwebmath_cleaner.cli \
-  --input data/input.jsonl \
-  --output data/cleaned.jsonl \
-  --scorer hf --scorer-model /path/to/openwebmath-classifier \
-  --processor regex
-
-# 使用真实 LLM 处理灰区
-python -m openwebmath_cleaner.cli \
-  --input data/input.jsonl \
-  --output data/cleaned.jsonl \
-  --scorer hf --scorer-model /path/to/openwebmath-classifier \
-  --processor real \
-  --llm-api-base http://localhost:8000/v1 \
-  --llm-model qwen2.5-math-7b
-```
-
-模块结构：
-```
-modules/data_cleaner/
-├── openwebmath_cleaner/
-│   ├── segmenter.py      # 段级切分（公式保护）
-│   ├── light_rules.py    # 轻规则清洗 + 特征提取
-│   ├── scorer.py         # Classifier 评分 + 路由
-│   ├── llm_processor.py  # LLM 去噪/补全/重写
-│   ├── validator.py      # 数学感知校验
-│   ├── pipeline.py       # 主流程编排
-│   ├── config.py         # 配置管理
-│   ├── schemas.py        # 数据结构定义
-│   ├── io_utils.py       # JSONL 读写
-│   └── cli.py            # 命令行入口
-├── configs/              # 配置 YAML
-├── tests/                # 单元测试
-├── examples/             # 示例输入输出
-└── parquet_to_jsonl.py   # Parquet → pipeline 输入格式转换
-```
 
 ---
 
-### 2. CPT 领域续训（`modules/openwebmath/`）
 
-**全参数续训**，基于 LLaMA-Factory + DeepSpeed ZeRO-2：
-
-- **基础模型**：Qwen2.5-Math-7B
-- **训练数据**：
-  - `swallowmath_textbook`（5.1G，教材风格）
-  - `swallowmath_qa`（1.8G，QA 风格）
-  - `fineweb_edu_10bt`（2.1G，FineWeb 英文教育）
-  - `fineweb_edu_chinese`（873M，FineWeb 中文教育）
-- **配置**：`qwen25_math_cpt.yaml`（packing=true, cutoff_len=4096, lr=2e-5, 1 epoch）
-- **硬件**：4×A100 40GB
-
-```bash
-bash modules/openwebmath/run_cpt.sh
-```
-
----
-
-### 3. SFT 数据构造与训练（`modules/openwebmath/` + `training/`）
 
 #### CoT 数据构造
 
@@ -180,7 +95,7 @@ bash scripts/run_sft.sh
 
 ---
 
-### 4. DPO 数据构造（`pipelines/`）
+###  DPO 数据构造（`pipelines/`）
 
 #### 选题策略 (`select_dpo_questions.py`)
 
@@ -194,27 +109,6 @@ bash scripts/run_sft.sh
 
 #### Student-Teacher 数据构造 (`dpo_final_pipeline.py`)
 
-三阶段流程：
-
-```
-Student (Qwen2.5-Math-7B) 每题采样 8 次
-    │
-    ├── 全对 (8/8)      → 丢弃（太简单）
-    ├── 答对 ≥ 半 (4~7) → on-policy pair（正确 vs 错误回答）
-    ├── 答对 < 半 (1~3) → 交给 Teacher
-    └── 全错 (0/8)      → 交给 Teacher
-                              │
-Teacher (DeepSeek-R1-32B) 每题采样 2 次
-    │
-    ├── 两次全对 → teacher-chosen pair ✅
-    ├── 只对一次 → 丢弃（不稳定）
-    └── 两次全错 → 丢弃（题太难）
-```
-
-**关键设计**：
-- Teacher 使用 4-shot few-shot 格式指令，确保输出风格与 Student 一致（DPO 只学推理质量差异）
-- 长度比过滤（max_ratio=2.5），防止 DPO 学到 "短=好" 的虚假信号
-- 最佳长度匹配配对，避免系统性 chosen 比 rejected 短
 
 ```bash
 # Step 1: Student 推理（4×A100，约 3h）
@@ -241,7 +135,7 @@ python3 pipelines/dpo_final_pipeline.py --stage merge_student --num_shards 2
 
 ---
 
-### 5. Prefix-Guided Warm-Start（`rlvr/prefix_guided_warmstart.py`）
+### Prefix-Guided Warm-Start（`rlvr/prefix_guided_warmstart.py`）
 
 在 DPO 之后、LPPO 之前，对 **hard bucket**（Student 8次全错）的题做定向抢救：
 
@@ -268,7 +162,7 @@ python3 rlvr/prefix_guided_warmstart.py --stage evaluate --model_path /path/to/w
 
 ---
 
-### 6. LPPO 强化学习（`lppo/` + `rlvr/` + `scripts/run_math_grpo.sh`）
+### LPPO 强化学习（`lppo/` + `rlvr/` + `scripts/run_math_grpo.sh`）（参考 https://arxiv.org/html/2507.06573v1）
 
 基于 [verl](https://github.com/volcengine/verl) 框架的 **GRPO + LPPO**（Learning Progress Prioritized Policy Optimization）训练。
 
@@ -293,43 +187,43 @@ python3 rlvr/prefix_guided_warmstart.py --stage evaluate --model_path /path/to/w
 - 已经「学会」或「太难」的题权重减小（w_min=0.25）
 - 避免训练初期的"虚假学习进度"
 
-#### Reward 函数 (`reward_math_rlvr.py`)
-
-组合三个信号：
-
-```
-总分 = correctness_reward + fm_bonus - repetition_penalty
-
-correctness_reward:
-  答案正确           → +1.0
-  答案错但有 \boxed{} → 0.0  (LPPO 版本)
-  答案错且无格式      → -0.1
-
-fm_bonus（仅对正确/接近正确的回答生效）:
-  = λ_FM × max(0, (OpenWebMath_score - 3.0) / 2.0)
-  λ_FM=0.05，OpenWebMath Classifier 对 CoT 文本的质量评分
-
-repetition_penalty:
-  检测重复 n-gram 和重复长行，最大 0.05
-```
 
 #### 训练配置
 
-- **起点模型**：Qwen2.5-Math-7B-WarmStart（经过 CPT → SFT → DPO → Warm-Start）
+- basemodel：Qwen2.5-Math-7B-WarmStart（经过 CPT → SFT → DPO → Warm-Start）
 - **算法**：GRPO + LPPO
-- **硬件**：8×A100 40GB
+- **硬件**：8×A100 
 - **关键超参**：
   - rollout_n=8, response_length=1024
   - actor_lr=1e-6, kl_coef=0.05（adaptive KL）
   - LPPO: ema_beta=0.8, w_min=0.25, w_max=2.0, sigmoid_k=10, tau=0.08
 
 ```bash
-bash scripts/run_math_grpo.sh
+bash scripts/run_math_grpo.sh<img width="792" height="826" alt="_cgi-bin_mmwebwx-bin_webwxgetmsgimg__ MsgID=6737174512641630031 skey=@crypt_7a1c7503_5e17c462df099ecf983c542a360b9942 mmweb_appid=wx_webfilehelper" src="https://github.com/user-attachments/assets/d02687cc-b039-457f-bca2-fd6f9bd27554" />
+
 ```
+**训练结果如下：**
+**round1：**
+<img width="400" height="400" alt="_cgi-bin_mmwebwx-bin_webwxgetmsgimg__ MsgID=9042519120374792500 skey=@crypt_7a1c7503_5e17c462df099ecf983c542a360b9942 mmweb_appid=wx_webfilehelper" src="https://github.com/user-attachments/assets/7bd456cc-ba7e-4afd-91ca-78398ebbfc42" />
+
+**round2**：
+<img width="400" height="400" alt="_cgi-bin_mmwebwx-bin_webwxgetmsgimg__ MsgID=6737174512641630031 skey=@crypt_7a1c7503_5e17c462df099ecf983c542a360b9942 mmweb_appid=wx_webfilehelper" src="https://github.com/user-attachments/assets/bc9a9a05-99ba-4294-ae12-6648514eefdf" />
+
+
+**round3：**
+<img width="400" height="400" alt="_cgi-bin_mmwebwx-bin_webwxgetmsgimg__ MsgID=9009613133735928000 skey=@crypt_7a1c7503_5e17c462df099ecf983c542a360b9942 mmweb_appid=wx_webfilehelper" src="https://github.com/user-attachments/assets/505932c6-de30-4c8c-b6a8-656868842a9f" />
+
+
+
+
+**综合：**
+<img width="400" height="400" alt="_cgi-bin_mmwebwx-bin_webwxgetmsgimg__ MsgID=348395094263055489 skey=@crypt_7a1c7503_5e17c462df099ecf983c542a360b9942 mmweb_appid=wx_webfilehelper" src="https://github.com/user-attachments/assets/01e8e412-cd3e-4fc6-8e5b-d2f27acc9122" />
+
+
 
 ---
 
-### 7. 评测（`evaluation/`）
+### 7评测（`evaluation/`）
 
 | 文件 | 功能 |
 |------|------|
@@ -368,11 +262,11 @@ transformers, vllm, peft, torch, latex2sympy2
 
 | 阶段 | 配置 |
 |------|------|
-| CPT 全参数训练 | 4× A100 40GB + DeepSpeed ZeRO-2 |
-| SFT / DPO LoRA | 4× A100 40GB |
-| Student 推理 (7B) | 4× A100 40GB (TP=4) |
-| Teacher 推理 (32B) | 4× A100 40GB (TP=4) |
-| LPPO (GRPO) | 8× A100 40GB |
+| CPT 全参数训练 | 4× A100  + DeepSpeed ZeRO-2 |
+| SFT / DPO LoRA | 4× A100 |
+| Student 推理 (7B) | 4× A100  (TP=4) |
+| Teacher 推理 (32B) | 4× A100  (TP=4) |
+| LPPO (GRPO) | 8× A100  |
 
 ---
 
@@ -383,7 +277,7 @@ transformers, vllm, peft, torch, latex2sympy2
 3. **数据格式**：题库 JSONL 每行需包含 `question`（题目）和 `ground_truth`（标准答案，纯数值/分数）。
 4. **LPPO 模块**：`lppo/` 目录需要从 verl 仓库配合使用，通过 `PYTHONPATH` 引入。
 
----
+
 
 ## 引用的模型
 
