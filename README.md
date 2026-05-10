@@ -24,7 +24,7 @@
 ├── scripts/            # 各阶段 Shell 启动脚本
 ├── modules/
 │   ├── data_cleaner/   # 通用数学语料二次清洗 Pipeline（段切分 → 规则清洗 → Classifier 路由）
-│   ├── openwebmath/       # OpenWebMath-4plus CPT 数据处理（13 阶段清洗）+ CPT/SFT 训练配置
+│   ├── openwebmath/       # OpenWebMath-4plus CPT 数据处理
 │   └── eval_tasks/     # lm-evaluation-harness 本地任务配置
 ├── utils/              # 零散维护工具
 └── requirements.txt
