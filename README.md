@@ -75,9 +75,7 @@ OpenWebMath-4plus 原始网页数学语料
      │  evaluation/eval_math.py
 ```
 
-
 ---
-
 
 
 #### CoT 数据构造
@@ -282,5 +280,5 @@ transformers, vllm, peft, torch, latex2sympy2
 ## 引用的模型
 
 - **Base**：[Qwen2.5-Math-7B](https://huggingface.co/Qwen/Qwen2.5-Math-7B) / [Qwen2.5-Math-7B-Instruct](https://huggingface.co/Qwen/Qwen2.5-Math-7B-Instruct)
-- **Teacher**：[DeepSeek-R1-Distill-Qwen-32B](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-32B)
+- **Teacher**： [Qwen2.5-Math-72B-Instruct](https://huggingface.co/Qwen/Qwen2.5-Math-72B-Instruct)
 - **Classifier**：[HuggingFaceTB/openwebmath-classifier](https://huggingface.co/HuggingFaceTB/openwebmath-classifier)
