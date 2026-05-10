@@ -1,0 +1,29 @@
+# 段切分
+min_segment_chars: 40
+ideal_min_chars: 200
+ideal_max_chars: 1500
+hard_max_chars: 2200
+
+# classifier 阈值
+clf_keep: 4.2
+clf_keep_with_math: 3.8
+clf_llm_low: 3.0
+clf_drop: 2.8
+
+# 校验阈值
+length_ratio_min: 0.45
+length_ratio_max: 1.20
+number_recall_min: 0.90
+variable_recall_min: 0.85
+symbol_recall_min: 0.80
+max_clean_score_drop: 0.20
+
+# 轻规则层
+min_text_chars: 30
+max_link_ratio: 0.50
+max_repeat_ratio: 0.60
+max_boilerplate_for_drop: 5
+
+# 回退阈值
+fallback_min_raw_score: 3.5
+min_post_score_absolute: 3.6

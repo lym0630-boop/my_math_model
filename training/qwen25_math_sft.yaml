@@ -1,0 +1,58 @@
+# ============================================================
+# Qwen2.5-Math SFT LoRA 训练配置
+# ============================================================
+# 基础模型：checkpoint-3800（CPT 后）
+# 数据集：swallowmath_sft（50k SFT 样本）
+# 硬件：4×A100 40GB
+# 方法：LoRA (rank=64, alpha=128)
+# ============================================================
+
+### 模型配置
+model_name_or_path: /cfs/cfs-esygraib/belvathliu/GLM-TTS/floders/pipline/model_eval/checkpoint-3800
+trust_remote_code: true
+
+### 方法（SFT + LoRA）
+stage: sft                          # supervised fine-tuning
+do_train: true
+finetuning_type: lora
+lora_rank: 64                       # 数学推理需要较强的适配能力
+lora_alpha: 128
+lora_target: all                    # 适配所有线性层
+lora_dropout: 0.05
+
+### 数据配置
+dataset: swallowmath_sft            # 使用转换后的 SFT 数据
+template: qwen                      # Qwen2 chat template
+cutoff_len: 2048                    # 上下文长度
+preprocessing_num_workers: 16
+
+### 系统 prompt（Qwen2.5-Math 官方推荐）
+system_prompt: "Please reason step by step, and put your final answer within \\boxed{}."
+
+### 训练超参（4×A100 40GB）
+per_device_train_batch_size: 4
+gradient_accumulation_steps: 4
+learning_rate: 1.0e-4
+num_train_epochs: 3
+lr_scheduler_type: cosine
+warmup_ratio: 0.1
+weight_decay: 0.01
+bf16: true                          # bfloat16 混合精度
+
+### 输出设置
+output_dir: /cfs/cfs-esygraib/belvathliu/GLM-TTS/floders/pipline/model_eval/sft_output
+logging_steps: 10
+save_steps: 500
+save_total_limit: 3
+
+### 验证设置
+val_size: 0.01                      # 1% 验证集
+per_device_eval_batch_size: 4
+eval_strategy: steps
+eval_steps: 500
+
+### 其他设置
+seed: 42
+dataloader_pin_memory: true
+gradient_checkpointing: true
+report_to: []

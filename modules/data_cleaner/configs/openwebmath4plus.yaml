@@ -1,0 +1,40 @@
+# OpenWebMath-4+ 专用配置
+# 适配特点：数据已经过 4+ 筛选，质量基线较高；大部分文本 1000-5000 字符；约 40% 含 LaTeX
+
+# === 段切分 ===
+# 目标段长 800-3000 字符
+# 数据分布：62% < 3K（不切），22% 3K-5K（不切或切2段），16% > 5K（切2-8段）
+min_segment_chars: 100
+ideal_min_chars: 800
+ideal_max_chars: 3000
+hard_max_chars: 4500
+
+# === classifier 阈值 ===
+# DummyScorer 校准说明：
+#   - 有 LaTeX + 数学关键词: ~3.5-4.8
+#   - 纯文字数学（无 LaTeX）: ~2.5-3.5
+#   - OpenWebMath-4+ 已经过质量筛选，60% 纯文字数学不应被误杀
+#
+# DummyScorer 模式下建议偏保守（多保留）：
+clf_keep: 3.6           # 有一定数学信号即直接保留
+clf_keep_with_math: 3.0  # 有数学关键词/题解结构的，更宽松保留
+clf_llm_low: 2.5        # 灰区下界
+clf_drop: 2.2           # 只丢弃 DummyScorer 认为几乎无数学价值的
+
+# === 校验阈值 ===
+length_ratio_min: 0.45
+length_ratio_max: 1.20
+number_recall_min: 0.90
+variable_recall_min: 0.85
+symbol_recall_min: 0.80
+max_clean_score_drop: 0.25   # 稍放宽，因为 DummyScorer 波动较大
+
+# === 轻规则层 ===
+min_text_chars: 30
+max_link_ratio: 0.40         # OpenWebMath 网页来源可能有少量链接
+max_repeat_ratio: 0.50
+max_boilerplate_for_drop: 4
+
+# === 回退阈值 ===
+fallback_min_raw_score: 3.0   # OpenWebMath 已筛过，大部分文本有保留价值
+min_post_score_absolute: 3.2

@@ -1,0 +1,9 @@
+numpy
+pandas
+pyarrow
+tqdm
+transformers
+vllm
+peft
+torch
+latex2sympy2
