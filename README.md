@@ -160,7 +160,7 @@ python3 rlvr/prefix_guided_warmstart.py --stage evaluate --model_path /path/to/w
 
 ---
 
-### LPPO 强化学习（`lppo/` + `rlvr/` + `scripts/run_math_grpo.sh`）（参考 https://arxiv.org/html/2507.06573v1）
+### LPPO 强化学习（`lppo/` + `rlvr/` + `scripts/run_math_grpo.sh`）（参考 https://arxiv.org/html/2507.06573v1 ）
 
 基于 [verl](https://github.com/volcengine/verl) 框架的 **GRPO + LPPO**（Learning Progress Prioritized Policy Optimization）训练。
 
